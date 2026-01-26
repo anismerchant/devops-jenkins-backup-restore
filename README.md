@@ -38,3 +38,14 @@ Jenkins EC2
 ## Status
 
 🚧 In progress — implemented step-by-step with Git commits
+
+## Environment Configuration (.env)
+
+This project uses a `.env` file at the repository root to store environment-specific configuration.
+
+### Required Variables
+
+```env
+S3_BUCKET=s3://jenkins-backup-your-bucket-name
+AWS_REGION=us-east-1
+BACKUP_FILE=jenkins-backup-YYYY-MM-DD_HH-MM-SS.tar.gz

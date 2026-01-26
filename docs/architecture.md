@@ -55,6 +55,21 @@ v
 [JENKINS_HOME restored]
 
 ```
+Restore flow details:
+```
+S3
+ |
+ | aws s3 cp
+ v
+/tmp/backup.tar.gz
+ |
+ | extract
+ v
+/var/lib/jenkins   ← restored backup target
+ |
+ v
+Jenkins service
+```
 
 ## Why This Works
 

@@ -1,0 +1,24 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors / IDEs
+.vscode/
+.idea/
+
+# Logs & temp files
+*.log
+*.tmp
+
+# Backup archives (generated artifacts)
+*.tar.gz
+*.zip
+
+# AWS / credentials (never commit)
+.env
+*.pem
+.aws/
+
+# Evidence noise (optional – keep screenshots only)
+evidence/logs/*
+!evidence/logs/.gitkeep

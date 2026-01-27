@@ -1,55 +1,76 @@
 #!/bin/bash
-# Run this script using bash
+# Safe Jenkins restore script with optional guards
 
-# Exit immediately if any command fails
-# Prevents partial restores that could corrupt Jenkins
-set -e
+set -euo pipefail
 
 # ------------------------------------------------------------
-# Load environment variables from .env at project root
+# Optional: load .env for local runs
 # ------------------------------------------------------------
-if [ -f "$(dirname "$0")/../../.env" ]; then
+ENV_FILE="$(dirname "$0")/../../.env"
+if [ -f "$ENV_FILE" ]; then
   set -a
-  source "$(dirname "$0")/../../.env"
+  source "$ENV_FILE"
   set +a
-else
-  echo "ERROR: .env file not found at project root"
-  exit 1
 fi
 
 # ------------------------------------------------------------
-# Validate required environment variables
+# Required env vars (Jenkins should inject these)
 # ------------------------------------------------------------
 : "${S3_BUCKET:?ERROR: S3_BUCKET is not set}"
 : "${AWS_REGION:?ERROR: AWS_REGION is not set}"
 : "${BACKUP_FILE:?ERROR: BACKUP_FILE is not set}"
 
 # ------------------------------------------------------------
-# Configuration
+# Optional safety flags
+# ------------------------------------------------------------
+# REQUIRE_CONFIRM=true   → requires CONFIRM_RESTORE=YES
+# DRY_RUN=true           → validates only, no changes
+REQUIRE_CONFIRM="${REQUIRE_CONFIRM:-false}"
+DRY_RUN="${DRY_RUN:-false}"
+
+if [ "$REQUIRE_CONFIRM" = "true" ] && [ "${CONFIRM_RESTORE:-}" != "YES" ]; then
+  echo "ERROR: Restore blocked. Set CONFIRM_RESTORE=YES to proceed."
+  exit 1
+fi
+
+# ------------------------------------------------------------
+# Config
 # ------------------------------------------------------------
 JENKINS_HOME="/var/lib/jenkins"
 RESTORE_DIR="/tmp"
+BACKUP_PATH="${RESTORE_DIR}/${BACKUP_FILE}"
 
 # ------------------------------------------------------------
-# Restore process
+# Pre-flight checks
 # ------------------------------------------------------------
-echo "Stopping Jenkins service..."
+echo "Checking backup exists in S3..."
+aws s3 ls "${S3_BUCKET}/${BACKUP_FILE}" --region "${AWS_REGION}" >/dev/null
+
+if [ "$DRY_RUN" = "true" ]; then
+  echo "DRY_RUN enabled — restore validated, no changes made."
+  exit 0
+fi
+
+# ------------------------------------------------------------
+# Restore
+# ------------------------------------------------------------
+echo "Stopping Jenkins..."
 sudo systemctl stop jenkins
 
-echo "Downloading backup from S3..."
-aws s3 cp "${S3_BUCKET}/${BACKUP_FILE}" "${RESTORE_DIR}/" \
+echo "Downloading backup..."
+aws s3 cp "${S3_BUCKET}/${BACKUP_FILE}" "${BACKUP_PATH}" \
   --region "${AWS_REGION}"
 
-echo "Clearing existing Jenkins data..."
-sudo rm -rf "${JENKINS_HOME:?}/*"
+echo "Clearing Jenkins home..."
+sudo rm -rf "${JENKINS_HOME:?}"/*
 
-echo "Restoring Jenkins backup..."
-sudo tar -xzf "${RESTORE_DIR}/${BACKUP_FILE}" -C /var/lib
+echo "Extracting backup..."
+sudo tar -xzf "${BACKUP_PATH}" -C /var/lib
 
 echo "Fixing ownership..."
 sudo chown -R jenkins:jenkins "${JENKINS_HOME}"
 
-echo "Starting Jenkins service..."
+echo "Starting Jenkins..."
 sudo systemctl start jenkins
 
 echo "Restore completed successfully."

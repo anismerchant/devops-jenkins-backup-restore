@@ -6,26 +6,22 @@
 set -e
 
 # ------------------------------------------------------------
-# Load environment variables from .env at project root
+# Load environment variables from .env (optional)
 # ------------------------------------------------------------
-# We compute the path relative to this script so it works
-# no matter where the script is executed from.
-if [ -f "$(dirname "$0")/../../.env" ]; then
-  # Automatically export all variables loaded from the file
+# This allows local execution with .env
+# Jenkins will inject env vars directly, so .env is not required there
+ENV_FILE="$(dirname "$0")/../../.env"
+
+if [ -f "$ENV_FILE" ]; then
   set -a
-  source "$(dirname "$0")/../../.env"
-  # Stop auto-exporting variables
+  source "$ENV_FILE"
   set +a
-else
-  echo "ERROR: .env file not found at project root"
-  exit 1
 fi
 
 # ------------------------------------------------------------
 # Validate required environment variables
 # ------------------------------------------------------------
-# The ":" is a no-op command.
-# This syntax fails the script immediately if a variable is unset.
+# Fail fast if required configuration is missing
 : "${S3_BUCKET:?ERROR: S3_BUCKET is not set}"
 : "${AWS_REGION:?ERROR: AWS_REGION is not set}"
 

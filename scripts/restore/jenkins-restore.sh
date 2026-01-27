@@ -30,11 +30,13 @@ REQUIRE_CONFIRM="${REQUIRE_CONFIRM:-false}"
 CONFIRM_RESTORE="${CONFIRM_RESTORE:-}"
 
 # ------------------------------------------------------------
-# Config
+# Config (Jenkins-owned temp dir to avoid sudo/permission issues)
 # ------------------------------------------------------------
 JENKINS_HOME="/var/lib/jenkins"
-RESTORE_DIR="/tmp"
+RESTORE_DIR="/var/lib/jenkins/tmp"
 BACKUP_PATH="${RESTORE_DIR}/${BACKUP_FILE}"
+
+mkdir -p "$RESTORE_DIR"
 
 # ------------------------------------------------------------
 # Validation (always runs)

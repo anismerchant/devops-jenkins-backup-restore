@@ -1,7 +1,7 @@
 #!/bin/bash
-# Jenkins restore validation script (SAFE MODE)
-# This script is intentionally non-destructive.
-# Actual restore must be performed manually via SSH.
+# Jenkins restore script
+# Default: SAFE validation-only
+# Destructive restore requires explicit confirmation
 
 set -euo pipefail
 
@@ -16,20 +16,28 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 # ------------------------------------------------------------
-# Required env vars (Jenkins should inject these)
+# Required env vars
 # ------------------------------------------------------------
 : "${S3_BUCKET:?ERROR: S3_BUCKET is not set}"
 : "${AWS_REGION:?ERROR: AWS_REGION is not set}"
 : "${BACKUP_FILE:?ERROR: BACKUP_FILE is not set}"
 
 # ------------------------------------------------------------
+# Optional safety flags
+# ------------------------------------------------------------
+# REQUIRE_CONFIRM=true → requires CONFIRM_RESTORE=YES
+REQUIRE_CONFIRM="${REQUIRE_CONFIRM:-false}"
+CONFIRM_RESTORE="${CONFIRM_RESTORE:-}"
+
+# ------------------------------------------------------------
 # Config
 # ------------------------------------------------------------
+JENKINS_HOME="/var/lib/jenkins"
 RESTORE_DIR="/tmp"
 BACKUP_PATH="${RESTORE_DIR}/${BACKUP_FILE}"
 
 # ------------------------------------------------------------
-# Validation only (SAFE)
+# Validation (always runs)
 # ------------------------------------------------------------
 echo "Validating backup exists in S3..."
 aws s3 ls "${S3_BUCKET}/${BACKUP_FILE}" --region "${AWS_REGION}" >/dev/null
@@ -41,5 +49,36 @@ aws s3 cp "${S3_BUCKET}/${BACKUP_FILE}" "${BACKUP_PATH}" \
 echo "Validating archive integrity..."
 tar -tzf "${BACKUP_PATH}" >/dev/null
 
-echo "Restore validation completed successfully."
-echo "⚠️  Manual restore must be executed via SSH with Jenkins stopped."
+# ------------------------------------------------------------
+# Safe exit unless explicitly confirmed
+# ------------------------------------------------------------
+if [ "$REQUIRE_CONFIRM" != "true" ]; then
+  echo "Restore validation completed successfully."
+  echo "⚠️  Safe mode enabled. No changes applied."
+  exit 0
+fi
+
+if [ "$CONFIRM_RESTORE" != "YES" ]; then
+  echo "ERROR: Restore blocked. Set CONFIRM_RESTORE=YES to proceed."
+  exit 1
+fi
+
+# ------------------------------------------------------------
+# Destructive restore (explicitly confirmed)
+# ------------------------------------------------------------
+echo "Stopping Jenkins..."
+sudo systemctl stop jenkins
+
+echo "Clearing Jenkins home..."
+sudo rm -rf "${JENKINS_HOME:?}"/*
+
+echo "Restoring Jenkins backup..."
+sudo tar -xzf "${BACKUP_PATH}" -C /var/lib
+
+echo "Fixing ownership..."
+sudo chown -R jenkins:jenkins "${JENKINS_HOME}"
+
+echo "Starting Jenkins..."
+sudo systemctl start jenkins
+
+echo "Restore completed successfully."

@@ -1,5 +1,7 @@
 #!/bin/bash
-# Safe Jenkins restore script with optional guards
+# Jenkins restore validation script (SAFE MODE)
+# This script is intentionally non-destructive.
+# Actual restore must be performed manually via SSH.
 
 set -euo pipefail
 
@@ -21,56 +23,23 @@ fi
 : "${BACKUP_FILE:?ERROR: BACKUP_FILE is not set}"
 
 # ------------------------------------------------------------
-# Optional safety flags
-# ------------------------------------------------------------
-# REQUIRE_CONFIRM=true   → requires CONFIRM_RESTORE=YES
-# DRY_RUN=true           → validates only, no changes
-REQUIRE_CONFIRM="${REQUIRE_CONFIRM:-false}"
-DRY_RUN="${DRY_RUN:-false}"
-
-if [ "$REQUIRE_CONFIRM" = "true" ] && [ "${CONFIRM_RESTORE:-}" != "YES" ]; then
-  echo "ERROR: Restore blocked. Set CONFIRM_RESTORE=YES to proceed."
-  exit 1
-fi
-
-# ------------------------------------------------------------
 # Config
 # ------------------------------------------------------------
-JENKINS_HOME="/var/lib/jenkins"
 RESTORE_DIR="/tmp"
 BACKUP_PATH="${RESTORE_DIR}/${BACKUP_FILE}"
 
 # ------------------------------------------------------------
-# Pre-flight checks
+# Validation only (SAFE)
 # ------------------------------------------------------------
-echo "Checking backup exists in S3..."
+echo "Validating backup exists in S3..."
 aws s3 ls "${S3_BUCKET}/${BACKUP_FILE}" --region "${AWS_REGION}" >/dev/null
 
-if [ "$DRY_RUN" = "true" ]; then
-  echo "DRY_RUN enabled — restore validated, no changes made."
-  exit 0
-fi
-
-# ------------------------------------------------------------
-# Restore
-# ------------------------------------------------------------
-echo "Stopping Jenkins..."
-sudo systemctl stop jenkins
-
-echo "Downloading backup..."
+echo "Downloading backup for integrity check..."
 aws s3 cp "${S3_BUCKET}/${BACKUP_FILE}" "${BACKUP_PATH}" \
   --region "${AWS_REGION}"
 
-echo "Clearing Jenkins home..."
-sudo rm -rf "${JENKINS_HOME:?}"/*
+echo "Validating archive integrity..."
+tar -tzf "${BACKUP_PATH}" >/dev/null
 
-echo "Extracting backup..."
-sudo tar -xzf "${BACKUP_PATH}" -C /var/lib
-
-echo "Fixing ownership..."
-sudo chown -R jenkins:jenkins "${JENKINS_HOME}"
-
-echo "Starting Jenkins..."
-sudo systemctl start jenkins
-
-echo "Restore completed successfully."
+echo "Restore validation completed successfully."
+echo "⚠️  Manual restore must be executed via SSH with Jenkins stopped."

@@ -18,7 +18,3 @@ Thumbs.db
 .env
 *.pem
 .aws/
-
-# Evidence noise (optional – keep screenshots only)
-evidence/logs/*
-!evidence/logs/.gitkeep
